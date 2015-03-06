@@ -28,7 +28,7 @@ function xem_fast_rep_info()
         'website'       => 'http://xemix.eu',
         'author'        => 'Xemix',
         'authorsite'    => 'http://xemix.eu',
-        'version'       => '1.0',
+        'version'       => '1.1',
         'codename'      => 'xem_fast_rep',
         'compatibility' => '18*'
     ];
@@ -279,25 +279,19 @@ class xem_fast_rep
 
     private static function add_button($uid, $pid, $to_rep, $rep_value = 1)
     {
-        global $lang;
+        global $mybb, $lang;
 
         $lang -> load('xem_fast_rep');
 
-        $rep = [];
-        if($rep_value == 1)
+        if(($mybb->settings['posrep'] && $to_rep == 1) || ($to_rep == 0 && $rep_value == 1))
         {
-            $rep[0] = 'plus';
-            $rep[1] = '+';
-            $rep[2] = $lang->xem_fast_rep_like_it;
-        }
-        else
-        {
-            $rep[0] = 'minus';
-            $rep[1] = '-';
-            $rep[2] = $lang->xem_fast_rep_unlike_it;
+            return '<span onclick=\"vote(\''.$uid.'\', \''.$pid.'\', \''.$to_rep.'\')\" class=\"reps plus\" id=\"rep_plus_'.$pid.'\" title=\"'.$lang->xem_fast_rep_like_it.'\">+</span>';
         }
 
-        return '<span onclick=\"vote(\''.$uid.'\', \''.$pid.'\', \''.$to_rep.'\')\" class=\"reps '.$rep[0].'\" id=\"rep_'.$rep[0].'_'.$pid.'\" title=\"'.$rep[2].'\">'.$rep[1].'</span>';
+        if(($mybb->settings['negrep'] && $to_rep == -1) || $to_rep == 0)
+        {
+            return '<span onclick=\"vote(\''.$uid.'\', \''.$pid.'\', \''.$to_rep.'\')\" class=\"reps minus\" id=\"rep_minus_'.$pid.'\" title=\"'.$lang->xem_fast_rep_unlike_it.'\">-</span>';
+        }
     }
 
     private static function count_reps($pid, $count)
