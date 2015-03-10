@@ -28,7 +28,7 @@ function xem_fast_rep_info()
         'website'       => 'http://xemix.eu',
         'author'        => 'Xemix',
         'authorsite'    => 'http://xemix.eu',
-        'version'       => '1.1',
+        'version'       => '1.2',
         'codename'      => 'xem_fast_rep',
         'compatibility' => '18*'
     ];
@@ -148,8 +148,11 @@ class xem_fast_rep
 
         $post_reps = '<span class=\"reps_'.$post['pid'].'\" style=\"float:right;\">'.$add_reps.$delete_reps.self::count_reps($post['pid'], $r).'</span>';
 
-        eval("\$post['xem_fast_rep'] = \"".$post_reps."\";");
-        return $post;
+        if(self::adduser_permissions() && self::getuser_permissions($post))
+        {
+            eval("\$post['xem_fast_rep'] = \"".$post_reps."\";");
+            return $post;
+        }
     }
 
     public function xmlhttp()
@@ -162,12 +165,15 @@ class xem_fast_rep
             !$mybb->user['uid'] ||
             (int)$mybb->input['reputation'] != '1' &&
             (int)$mybb->input['reputation'] != '0' &&
-            (int)$mybb->input['reputation'] != '-1'
-        )) exit();
+            (int)$mybb->input['reputation'] != '-1' &&
+            !self::adduser_permissions()
+        )) exit;
 
         $reputation = (int)$mybb->input['reputation'];
         $uid = (int)$mybb->input['uid'];
         $pid = (int)$mybb->input['pid'];
+
+        if(!self::getuser_permissions($uid, $pid)) exit;
 
         switch($mybb->input['action'])
         {
@@ -204,7 +210,7 @@ class xem_fast_rep
                 }
                 elseif($reputation == 0 && self::$rid)
                 {
-                    self::delete(self::$rid);
+                    self::delete(self::$rid, $uid);
                     die(
                         stripslashes(self::add_button($uid, $pid, '1', '1')) .
                         stripslashes(self::add_button($uid, $pid, '-1', '-1')) .
@@ -251,6 +257,11 @@ class xem_fast_rep
         $data['dateline'] = TIME_NOW;
 
         $db->insert_query('reputation', $data);
+
+        $query = $db->simple_select("reputation", "SUM(reputation) AS reputation_count", "uid='".$data['uid']."'");
+        $reputation_value = $db->fetch_field($query, "reputation_count");
+
+        $db->update_query("users", ['reputation' => (int)$reputation_value], "uid='".$data['uid']."'");
     }
 
     private static function update($data)
@@ -258,13 +269,23 @@ class xem_fast_rep
         global $db;
 
         $db->update_query('reputation', $data, 'rid = '.self::$rid);
+
+        $query = $db->simple_select("reputation", "SUM(reputation) AS reputation_count", "uid='".$data['uid']."'");
+        $reputation_value = $db->fetch_field($query, "reputation_count");
+
+        $db->update_query("users", ['reputation' => (int)$reputation_value], "uid='".$data['uid']."'");
     }
 
-    private static function delete($rid)
+    private static function delete($rid, $uid)
     {
         global $db;
 
         $db->delete_query('reputation', 'rid='.$rid);
+
+        $query = $db->simple_select("reputation", "SUM(reputation) AS reputation_count", "uid='".$uid."'");
+        $reputation_value = $db->fetch_field($query, "reputation_count");
+
+        $db->update_query("users", ['reputation' => (int)$reputation_value], "uid='".$uid."'");
     }
 
     private static function existing_reputation($pid, $uid)
@@ -315,6 +336,65 @@ class xem_fast_rep
         }
 
         return $c;
+    }
+
+    private static function adduser_permissions()
+    {
+        global $mybb;
+
+        if($mybb->usergroup['canview'] != 1 || $mybb->usergroup['cangivereputations'] != 1)
+        {
+            return false;
+        }
+
+        return true;
+    }
+
+    private static function getuser_permissions($post)
+    {
+        global $mybb;
+
+        $user = get_user($post['uid']);
+        $user_permissions = user_permissions($uid);
+
+        if($post)
+        {
+            $thread = get_thread($post['tid']);
+            $forum = get_forum($thread['fid']);
+            $forumpermissions = forum_permissions($forum['fid']);
+
+            if(($post['visible'] == 0 && !is_moderator($forum['fid'], "canviewunapprove")) || $post['visible'] < 0)
+            {
+                $permissions = false;
+            }
+            elseif(($thread['visible'] == 0 && !is_moderator($forum['fid'], "canviewunapprove")) || $thread['visible'] < 0)
+            {
+                $permissions = false;
+            }
+            elseif($forumpermissions['canview'] == 0 || $forumpermissions['canpostreplys'] == 0 || $mybb->user['suspendposting'] == 1)
+            {
+                $permissions = false;
+            }
+            elseif(isset($forumpermissions['canonlyviewownthreads']) && $forumpermissions['canonlyviewownthreads'] == 1 && $thread['uid'] != $mybb->user['uid'])
+            {
+                $permissions = false;
+            }
+            else
+            {
+                $permissions = true;
+            }
+        }
+        else
+        {
+            $permissions = false;
+        }
+
+        if($user_permissions['usereputationsystem'] != 1 || !$user || !$permissions)
+        {
+            return false;
+        }
+
+        return true;
     }
 
 }
