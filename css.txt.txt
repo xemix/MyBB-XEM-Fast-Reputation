@@ -22,3 +22,12 @@
 	background-color: #f0ad4e;
 	cursor: pointer;
 }
+
+.liked_this {
+	background: #efefef;
+	padding: 6px;
+	margin: 2px;
+	vertical-align: middle;
+	border-radius: 2px;
+	font-size: 11px;
+}

@@ -28,7 +28,7 @@ function xem_fast_rep_info()
         'website'       => 'http://xemix.eu',
         'author'        => 'Xemix',
         'authorsite'    => 'http://xemix.eu',
-        'version'       => '1.2',
+        'version'       => '1.3',
         'codename'      => 'xem_fast_rep',
         'compatibility' => '18*'
     ];
@@ -50,6 +50,12 @@ function xem_fast_rep_install()
         [   
             'name'        => 'xem_fast_rep_active',
             'title'       =>  $lang->xem_fast_rep_plugin_active,
+            'optionscode' => 'yesno',
+            'value'       => '1'
+        ],
+        [   
+            'name'        => 'xem_fast_rep_show_liked_this',
+            'title'       =>  $lang->xem_fast_rep_show_liked_this,
             'optionscode' => 'yesno',
             'value'       => '1'
         ],
@@ -116,7 +122,14 @@ class xem_fast_rep
         {
             foreach(self::$reputations[ $post['pid'] ] as $reputation)
             {
-                $r += $reputation['reputation']; //suma reputacji postu
+                $r += $reputation['reputation'];
+
+                $liked_this[ $post['pid'] ][] = [
+                    'username'   => $reputation['username'],
+                    'uid'        => $reputation['uid'],
+                    'reputation' => $reputation['reputation'],
+                    'adduid'     => $reputation['adduid'],
+                ];
 
                 if($mybb->user['uid'] == $reputation['adduid'])
                 {
@@ -146,7 +159,9 @@ class xem_fast_rep
             }
         }
 
-        $post_reps = '<span class=\"reps_'.$post['pid'].'\" style=\"float:right;\">'.$add_reps.$delete_reps.self::count_reps($post['pid'], $r).'</span>';
+        $liked = self::liked_this($liked_this[ $post['pid'] ]);
+
+        $post_reps = '<span id=\"xem_fast_rep\" class=\"reps_'.$post['pid'].'\" style=\"float:right;\">'.$liked.$add_reps.$delete_reps.self::count_reps($post['pid'], $r).'</span>';
 
         if(self::adduser_permissions() && self::getuser_permissions($post))
         {
@@ -165,15 +180,15 @@ class xem_fast_rep
             !$mybb->user['uid'] ||
             (int)$mybb->input['reputation'] != '1' &&
             (int)$mybb->input['reputation'] != '0' &&
-            (int)$mybb->input['reputation'] != '-1' &&
-            !self::adduser_permissions()
+            (int)$mybb->input['reputation'] != '-1'
         )) exit;
 
         $reputation = (int)$mybb->input['reputation'];
         $uid = (int)$mybb->input['uid'];
         $pid = (int)$mybb->input['pid'];
 
-        if(!self::getuser_permissions($uid, $pid)) exit;
+        if(!self::getuser_permissions($pid)) exit;
+        if(!self::adduser_permissions()) exit;
 
         switch($mybb->input['action'])
         {
@@ -196,6 +211,7 @@ class xem_fast_rep
                     if($reputation == 1)
                     {
                         die(
+                            stripslashes(self::liked_this($pid)) .
                             stripslashes(self::add_button($uid, $pid, '0', '-1')) .
                             stripslashes(self::count_reps($pid, self::get_count_reps($pid)))
                         );
@@ -203,6 +219,7 @@ class xem_fast_rep
                     else
                     {
                         die(
+                            stripslashes(self::liked_this($pid)) .
                             stripslashes(self::add_button($uid, $pid, '0', '1')) .
                             stripslashes(self::count_reps($pid, self::get_count_reps($pid)))
                         );
@@ -212,6 +229,7 @@ class xem_fast_rep
                 {
                     self::delete(self::$rid, $uid);
                     die(
+                        stripslashes(self::liked_this($pid)) .
                         stripslashes(self::add_button($uid, $pid, '1', '1')) .
                         stripslashes(self::add_button($uid, $pid, '-1', '-1')) .
                         stripslashes(self::count_reps($pid, self::get_count_reps($pid)))
@@ -240,12 +258,19 @@ class xem_fast_rep
     {
         global $db;
 
-        $get_reps = $db->simple_select("reputation", "adduid, pid, reputation", $pids);
+        $get_reps = $db->query("SELECT 
+            r.adduid, r.pid, r.reputation, u.uid, u.username
+            FROM ".TABLE_PREFIX."reputation r 
+            LEFT JOIN ".TABLE_PREFIX."users u ON (r.adduid = u.uid) WHERE ".$pids
+        );
+
         while($rep = $db->fetch_array($get_reps))
         {
             self::$reputations[ $rep['pid'] ][] = [
                 'adduid'     => $rep['adduid'],
                 'reputation' => $rep['reputation'],
+                'username'   => $rep['username'],
+                'uid'        => $rep['uid'],
             ];
         }
     }
@@ -338,6 +363,98 @@ class xem_fast_rep
         return $c;
     }
 
+    private static function liked_this($liked_this)
+    {
+        global $mybb, $db, $lang;
+
+        $lang -> load('xem_fast_rep');
+
+        if($mybb->settings['xem_fast_rep_show_liked_this'])
+        {
+            if(is_array($liked_this))
+            { 
+                $num = 1;
+                foreach($liked_this as $liked)
+                {
+                    if($liked['reputation'] == 1)
+                    {
+                        if($mybb->user['uid'] == $liked['uid']) $num = 0;
+
+                        $likeThis[$num] = [
+                            $liked['uid'],
+                            $liked['username'],
+                        ];
+                        $num++;
+                    }
+                }
+            }
+            elseif($liked_this !== NULL)
+            {
+                $get_likes = $db->query("SELECT u.username, u.uid  
+                    FROM ".TABLE_PREFIX."reputation r 
+                    LEFT JOIN ".TABLE_PREFIX."users u ON (r.adduid = u.uid) 
+                    WHERE r.pid = '".$liked_this."' AND r.reputation = '1'"
+                );
+
+                $num = 1;
+                while($liked = $db->fetch_array($get_likes))
+                {
+                    if($mybb->user['uid'] == $liked['uid']) $num = 0;
+                    $likeThis[$num] = [
+                        $liked['uid'],
+                        $liked['username'],
+                    ];
+                    $num++;
+                }
+            }
+
+            $count_likeThis = count($likeThis);
+            if(is_array($likeThis))
+            {
+                foreach($likeThis as $key => $lt)
+                {
+                    if(in_array($mybb->user['username'], $lt))
+                    {
+                        $likeThis[$key] = array_replace($lt, [1 => $lang->you]);
+                        $youLikeThis = true;
+                    }
+                }
+
+                ksort($likeThis);
+                $likeThis = array_values($likeThis);
+
+                switch($count_likeThis)
+                {
+                    case 1:
+                        if(isset($youLikeThis))
+                        {
+                            $m = $lang->you_like_it;
+                        }
+                        else
+                        {
+                            $m = self::profile_url($likeThis[0][0], $likeThis[0][1]).' '.$lang->like_it;
+                        }
+                        break;
+                    case 2: 
+                        $m = self::profile_url($likeThis[0][0], $likeThis[0][1]).' i '.self::profile_url($likeThis[1][0], $likeThis[1][1]).' '.$lang->like_it;
+                        break;
+                    case 3:
+                        $m = self::profile_url($likeThis[0][0], $likeThis[0][1]).', '.self::profile_url($likeThis[1][0], $likeThis[1][1]).' i '.self::profile_url($likeThis[2][0], $likeThis[2][1]).' '.$lang->like_it;
+                        break;
+                    default:
+                        $m = self::profile_url($likeThis[0][0], $likeThis[0][1]).', '.self::profile_url($likeThis[1][0], $likeThis[1][1]).', '.self::profile_url($likeThis[2][0], $likeThis[2][1]).' '.$lang->and.' '.($count_likeThis-3).' '.$lang->others_person_like_it;
+                        break;
+                }
+                return '<span class=\"liked_this\">'.$m.'</span>';
+            }
+        }
+    }
+
+    private static function profile_url($uid, $username)
+    {
+        return '<a href=\"'.$mybb->settings['bburl'].get_profile_link($uid).'\">'.$username.'</a>';
+    }
+
     private static function adduser_permissions()
     {
         global $mybb;
@@ -352,7 +469,13 @@ class xem_fast_rep
 
     private static function getuser_permissions($post)
     {
-        global $mybb;
+        global $mybb, $db;
+
+        if(!is_array($post))
+        {
+            $get_post = $db->simple_select('posts', '*', 'pid='.$post);
+            $post = $db->fetch_array($get_post);
+        }
 
         $user = get_user($post['uid']);
         $user_permissions = user_permissions($uid);
