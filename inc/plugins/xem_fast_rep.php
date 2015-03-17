@@ -28,7 +28,7 @@ function xem_fast_rep_info()
         'website'       => 'http://xemix.eu',
         'author'        => 'Xemix',
         'authorsite'    => 'http://xemix.eu',
-        'version'       => '1.3',
+        'version'       => '1.3.1',
         'codename'      => 'xem_fast_rep',
         'compatibility' => '18*'
     ];
@@ -42,8 +42,8 @@ function xem_fast_rep_install()
 
     $setting_group_id = $db->insert_query('settinggroups', [
         'name'        => 'xem_fast_rep_settings',
-        'title'       =>  $lang->xem_fast_rep_settings_title,
-        'description' =>  $lang->xem_fast_rep_settings_title,
+        'title'       => $db->escape_string($lang->xem_fast_rep_settings_title),
+        'description' => $db->escape_string($lang->xem_fast_rep_settings_title),
     ]);
     
     $settings = [
@@ -112,6 +112,11 @@ class xem_fast_rep
 
         if(!self::$first_check) 
         {
+            if(!isset($pids))
+            {
+                $pids = "pid IN (".(int)$mybb->input['pid'].")";
+            }
+
             self::get_reps($pids);
             self::$first_check = true;
         }
