@@ -45,15 +45,15 @@ function xem_fast_rep_install()
         'title'       => $db->escape_string($lang->xem_fast_rep_settings_title),
         'description' => $db->escape_string($lang->xem_fast_rep_settings_title),
     ]);
-    
+
     $settings = [
-        [   
+        [
             'name'        => 'xem_fast_rep_active',
             'title'       =>  $lang->xem_fast_rep_plugin_active,
             'optionscode' => 'yesno',
             'value'       => '1'
         ],
-        [   
+        [
             'name'        => 'xem_fast_rep_show_liked_this',
             'title'       =>  $lang->xem_fast_rep_show_liked_this,
             'optionscode' => 'yesno',
@@ -73,7 +73,7 @@ function xem_fast_rep_install()
     $db->insert_query_multiple('settings', $settings);
 
     rebuild_settings();
-    
+
 }
 
 function xem_fast_rep_uninstall()
@@ -99,6 +99,58 @@ function xem_fast_rep_is_installed()
     return (bool)$db->num_rows($query);
 }
 
+function xem_fast_rep_activate()
+{
+    include_once MYBB_ROOT.'inc/adminfunctions_templates.php';
+
+    find_replace_templatesets(
+        'postbit',
+        '#' . preg_quote('{$post[\'attachments\']}') . '#i',
+        '{$post[\'xem_fast_rep\']}
+    {$post[\'attachments\']}'
+    );
+
+    find_replace_templatesets(
+        'postbit_classic',
+        '#' . preg_quote('{$post[\'attachments\']}') . '#i',
+        '{$post[\'xem_fast_rep\']}
+                    {$post[\'attachments\']}'
+    );
+
+    find_replace_templatesets(
+        'headerinclude',
+        '#' . preg_quote('{$stylesheets}') . '#i',
+        '<script type="text/javascript" src="{$mybb->asset_url}/jscripts/xem_fast_rep.js"></script>
+{$stylesheets}'
+    );
+}
+
+function xem_fast_rep_deactivate()
+{
+    include_once MYBB_ROOT."inc/adminfunctions_templates.php";
+
+    find_replace_templatesets(
+        'postbit',
+        '#' . preg_quote('{$post[\'xem_fast_rep\']}
+    {$post[\'attachments\']}') . '#i',
+        '{$post[\'attachments\']}'
+    );
+
+    find_replace_templatesets(
+        'postbit_classic',
+        '#' . preg_quote('{$post[\'xem_fast_rep\']}
+                    {$post[\'attachments\']}') . '#i',
+        '{$post[\'attachments\']}'
+    );
+
+    find_replace_templatesets(
+        'headerinclude',
+        '#' . preg_quote('<script type="text/javascript" src="{$mybb->asset_url}/jscripts/xem_fast_rep.js"></script>
+{$stylesheets}') . '#i',
+        '{$stylesheets}'
+    );
+}
+
 class xem_fast_rep
 {
 
@@ -110,7 +162,7 @@ class xem_fast_rep
     {
         global $db, $mybb, $pids;
 
-        if(!self::$first_check) 
+        if(!self::$first_check)
         {
             if(!isset($pids))
             {
@@ -122,7 +174,7 @@ class xem_fast_rep
         }
 
         $r = 0;
-        
+
         if(isset(self::$reputations[ $post['pid'] ]))
         {
             foreach(self::$reputations[ $post['pid'] ] as $reputation)
@@ -142,7 +194,7 @@ class xem_fast_rep
                     $rep_value = $reputation['reputation'];
                 }
 
-            } 
+            }
         }
 
         $add_reps = null;
@@ -180,7 +232,7 @@ class xem_fast_rep
         global $mybb, $db;
 
         if($mybb->input['action'] == 'xem_fast_rep' && (
-            !$mybb->input['uid'] || 
+            !$mybb->input['uid'] ||
             !$mybb->input['pid'] ||
             !$mybb->user['uid'] ||
             (int)$mybb->input['reputation'] != '1' &&
@@ -211,6 +263,7 @@ class xem_fast_rep
                         'adduid'     => (int)$mybb->user['uid'],
                         'pid'        => $pid,
                         'reputation' => $reputation,
+                        'comments'   => ""
                     ]);
 
                     if($reputation == 1)
@@ -247,6 +300,7 @@ class xem_fast_rep
                         'adduid'     => (int)$mybb->user['uid'],
                         'pid'        => $pid,
                         'reputation' => $reputation,
+                        'comments'   => ""
                     ]);
                     die;
                 }
@@ -263,9 +317,9 @@ class xem_fast_rep
     {
         global $db;
 
-        $get_reps = $db->query("SELECT 
+        $get_reps = $db->query("SELECT
             r.adduid, r.pid, r.reputation, u.uid, u.username
-            FROM ".TABLE_PREFIX."reputation r 
+            FROM ".TABLE_PREFIX."reputation r
             LEFT JOIN ".TABLE_PREFIX."users u ON (r.adduid = u.uid) WHERE ".$pids
         );
 
@@ -377,7 +431,7 @@ class xem_fast_rep
         if($mybb->settings['xem_fast_rep_show_liked_this'])
         {
             if(is_array($liked_this))
-            { 
+            {
                 $num = 1;
                 foreach($liked_this as $liked)
                 {
@@ -395,9 +449,9 @@ class xem_fast_rep
             }
             elseif($liked_this !== NULL)
             {
-                $get_likes = $db->query("SELECT u.username, u.uid  
-                    FROM ".TABLE_PREFIX."reputation r 
-                    LEFT JOIN ".TABLE_PREFIX."users u ON (r.adduid = u.uid) 
+                $get_likes = $db->query("SELECT u.username, u.uid
+                    FROM ".TABLE_PREFIX."reputation r
+                    LEFT JOIN ".TABLE_PREFIX."users u ON (r.adduid = u.uid)
                     WHERE r.pid = '".$liked_this."' AND r.reputation = '1'"
                 );
 
@@ -440,7 +494,7 @@ class xem_fast_rep
                             $m = self::profile_url($likeThis[0][0], $likeThis[0][1]).' '.$lang->like_it;
                         }
                         break;
-                    case 2: 
+                    case 2:
                         $m = self::profile_url($likeThis[0][0], $likeThis[0][1]).' i '.self::profile_url($likeThis[1][0], $likeThis[1][1]).' '.$lang->like_it;
                         break;
                     case 3:
