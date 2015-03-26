@@ -10,16 +10,9 @@
 
 1. Upload files
   * upload files from "upload" to your MyBB root directory
-
-2. {$post['xem_fast_rep']}
-  * add variable {$post['xem_fast_rep']} into Your Template → Post Bit Templates → postbit and postbit_classic before {$post['attachments']}
-
-3. JS
-  * add into Your Template → Ungrouped Templates → headerinclude before {$stylesheets}:
-  `<script type="text/javascript" src="{$mybb->asset_url}/jscripts/xem_fast_rep.js"></script>`
-
-4. CSS
+ 
+2. CSS
   * add CSS into global.css from css.txt file
 
-5. Install & activate
+3. Install & activate
   * Install and activate the plugin

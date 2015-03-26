@@ -28,7 +28,7 @@ function xem_fast_rep_info()
         'website'       => 'http://xemix.eu',
         'author'        => 'Xemix',
         'authorsite'    => 'http://xemix.eu',
-        'version'       => '1.3.1',
+        'version'       => '1.4',
         'codename'      => 'xem_fast_rep',
         'compatibility' => '18*'
     ];
@@ -88,6 +88,29 @@ function xem_fast_rep_uninstall()
     $db->delete_query('settinggroups', "name='xem_fast_rep_settings'");
     $db->delete_query('settings', 'gid='.$setting_group_id);
 
+    include_once MYBB_ROOT."inc/adminfunctions_templates.php";
+
+    find_replace_templatesets(
+        'postbit',
+        '#' . preg_quote('{$post[\'xem_fast_rep\']}
+    {$post[\'attachments\']}') . '#i',
+        '{$post[\'attachments\']}'
+    );
+
+    find_replace_templatesets(
+        'postbit_classic',
+        '#' . preg_quote('{$post[\'xem_fast_rep\']}
+    {$post[\'attachments\']}') . '#i',
+        '{$post[\'attachments\']}'
+    );
+
+    find_replace_templatesets(
+        'headerinclude',
+        '#' . preg_quote('<script type="text/javascript" src="{$mybb->asset_url}/jscripts/xem_fast_rep.js"></script>
+{$stylesheets}') . '#i',
+        '{$stylesheets}'
+    );
+
     rebuild_settings();
 }
 
@@ -97,6 +120,58 @@ function xem_fast_rep_is_installed()
 
     $query = $db->simple_select('settinggroups', 'gid', "name='xem_fast_rep_settings'");
     return (bool)$db->num_rows($query);
+}
+
+function xem_fast_rep_activate()
+{
+    include_once MYBB_ROOT.'inc/adminfunctions_templates.php';
+
+    find_replace_templatesets(
+        'postbit',
+        '#' . preg_quote('{$post[\'attachments\']}') . '#i',
+        '{$post[\'xem_fast_rep\']}
+    {$post[\'attachments\']}'
+    );
+
+    find_replace_templatesets(
+        'postbit_classic',
+        '#' . preg_quote('{$post[\'attachments\']}') . '#i',
+        '{$post[\'xem_fast_rep\']}
+    {$post[\'attachments\']}'
+    );
+
+    find_replace_templatesets(
+        'headerinclude',
+        '#' . preg_quote('{$stylesheets}') . '#i',
+        '<script type="text/javascript" src="{$mybb->asset_url}/jscripts/xem_fast_rep.js"></script>
+{$stylesheets}'
+    );
+}
+
+function xem_fast_rep_deactivate()
+{
+    include_once MYBB_ROOT."inc/adminfunctions_templates.php";
+
+    find_replace_templatesets(
+        'postbit',
+        '#' . preg_quote('{$post[\'xem_fast_rep\']}
+    {$post[\'attachments\']}') . '#i',
+        '{$post[\'attachments\']}'
+    );
+
+    find_replace_templatesets(
+        'postbit_classic',
+        '#' . preg_quote('{$post[\'xem_fast_rep\']}
+    {$post[\'attachments\']}') . '#i',
+        '{$post[\'attachments\']}'
+    );
+
+    find_replace_templatesets(
+        'headerinclude',
+        '#' . preg_quote('<script type="text/javascript" src="{$mybb->asset_url}/jscripts/xem_fast_rep.js"></script>
+{$stylesheets}') . '#i',
+        '{$stylesheets}'
+    );
 }
 
 class xem_fast_rep
@@ -112,7 +187,7 @@ class xem_fast_rep
 
         if(!self::$first_check) 
         {
-            if(!isset($pids))
+            if(!isset($pids) || $pids == '')
             {
                 $pids = "pid IN (".(int)$mybb->input['pid'].")";
             }
@@ -186,14 +261,13 @@ class xem_fast_rep
             (int)$mybb->input['reputation'] != '1' &&
             (int)$mybb->input['reputation'] != '0' &&
             (int)$mybb->input['reputation'] != '-1'
-        )) exit;
+        ) && !self::getuser_permissions($mybb->input['pid']) &&
+            !self::adduser_permissions()
+        ) exit;
 
         $reputation = (int)$mybb->input['reputation'];
         $uid = (int)$mybb->input['uid'];
         $pid = (int)$mybb->input['pid'];
-
-        if(!self::getuser_permissions($pid)) exit;
-        if(!self::adduser_permissions()) exit;
 
         switch($mybb->input['action'])
         {
@@ -211,6 +285,7 @@ class xem_fast_rep
                         'adduid'     => (int)$mybb->user['uid'],
                         'pid'        => $pid,
                         'reputation' => $reputation,
+                        'comments'   => '',
                     ]);
 
                     if($reputation == 1)
@@ -247,6 +322,7 @@ class xem_fast_rep
                         'adduid'     => (int)$mybb->user['uid'],
                         'pid'        => $pid,
                         'reputation' => $reputation,
+                        'comments'   => '',
                     ]);
                     die;
                 }
@@ -358,14 +434,10 @@ class xem_fast_rep
     {
         global $db;
 
-        $c = 0;
-        $counts = $db->simple_select("reputation", "reputation", "pid='".$pid."'");
-        while($count = $db->fetch_array($counts))
-        {
-            $c += $count['reputation'];
-        }
+        $counts = $db->simple_select("reputation", "SUM(reputation)", "pid='".$pid."'");
+        $count = $db->fetch_array($counts);
 
-        return $c;
+        return ($count['SUM(reputation)'] != null ? $count['SUM(reputation)'] : 0);
     }
 
     private static function liked_this($liked_this)
@@ -374,7 +446,7 @@ class xem_fast_rep
 
         $lang -> load('xem_fast_rep');
 
-        if($mybb->settings['xem_fast_rep_show_liked_this'])
+        if($mybb->settings['xem_fast_rep_show_liked_this'] == 1)
         {
             if(is_array($liked_this))
             { 
