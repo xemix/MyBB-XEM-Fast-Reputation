@@ -21,8 +21,8 @@ if(THIS_SCRIPT == 'showthread.php')
 {
     global $templatelist;
     $templatelist .= !empty($templatelist)
-        ? ',xem_fast_rep,xem_fast_rep_post_positive,xem_fast_rep_post_negative,xem_fast_rep_post_reps_count'
-        : 'xem_fast_rep,xem_fast_rep_post_positive,xem_fast_rep_post_negative,xem_fast_rep_post_reps_count';
+        ? ',xem_fast_rep,xem_fast_rep_post_positive,xem_fast_rep_post_negative,xem_fast_rep_post_reps_count,xem_fast_rep_post_who_like_it'
+        : 'xem_fast_rep,xem_fast_rep_post_positive,xem_fast_rep_post_negative,xem_fast_rep_post_reps_count,xem_fast_rep_post_who_like_it';
 }
 
 function xem_fast_rep_info()
