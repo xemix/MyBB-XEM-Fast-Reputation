@@ -5,3 +5,4 @@ $l['xem_fast_rep_description'] = 'Ce plugin vous permet d\'évaluer rapidement e
 $l['xem_fast_rep_settings_title'] = 'Configuration relative à XEM Fast Reputation';
 $l['xem_fast_rep_plugin_active'] = 'XEM Fast Reputation actif ?';
 $l['xem_fast_rep_show_liked_this'] = 'Montrer qui a aimé les messages ?';
+$l['xem_fast_rep_allow_unlike_posts'] = 'Allow change like and unlike posts';

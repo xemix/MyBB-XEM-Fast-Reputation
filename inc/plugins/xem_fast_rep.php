@@ -1,7 +1,7 @@
 <?php
 /**
  * Author: Szczepan 'Xemix' Machaj
- * WWW: xemix.eu / xemix.pl
+ * WWW: xemix.eu
  * Copyright (c) 2015
  * License: Creative Commons BY-NC-SA 4.0
  * License URL: http://creativecommons.org/licenses/by-nc-sa/4.0/
@@ -17,6 +17,14 @@ if($mybb->settings['enablereputation'])
     $plugins -> add_hook('xmlhttp',    ['xem_fast_rep', 'xmlhttp']);
 }
 
+if(THIS_SCRIPT == 'showthread.php')
+{
+    global $templatelist;
+    $templatelist .= !empty($templatelist)
+        ? ',xem_fast_rep,xem_fast_rep_post_positive,xem_fast_rep_post_negative,xem_fast_rep_post_reps_count'
+        : 'xem_fast_rep,xem_fast_rep_post_positive,xem_fast_rep_post_negative,xem_fast_rep_post_reps_count';
+}
+
 function xem_fast_rep_info()
 {
     global $lang;
@@ -28,7 +36,7 @@ function xem_fast_rep_info()
         'website'       => 'http://xemix.eu',
         'author'        => 'Xemix',
         'authorsite'    => 'http://xemix.eu',
-        'version'       => '1.4',
+        'version'       => '1.5',
         'codename'      => 'xem_fast_rep',
         'compatibility' => '18*'
     ];
@@ -59,6 +67,12 @@ function xem_fast_rep_install()
             'optionscode' => 'yesno',
             'value'       => '1'
         ],
+        [   
+            'name'        => 'xem_fast_rep_allow_unlike_posts',
+            'title'       =>  $lang->xem_fast_rep_allow_unlike_posts,
+            'optionscode' => 'yesno',
+            'value'       => '1'
+        ],
     ];
 
     $i = 1;
@@ -71,6 +85,52 @@ function xem_fast_rep_install()
     }
 
     $db->insert_query_multiple('settings', $settings);
+
+    $xfr_post_reps = '<span id="xem_fast_rep" class="reps_{$post[\'pid\']}" style="float:right;">{$post_reps}</span>';
+    $xfr_post_positive = '<span onclick="vote(\'{$uid}\', \'{$pid}\', \'{$to_rep}\')" class="reps plus" id="rep_plus_{$pid}" title="{$lang->xem_fast_rep_like_it}">+</span>';
+    $xfr_post_negative = '<span onclick="vote(\'{$uid}\', \'{$pid}\', \'{$to_rep}\')" class="reps minus" id="rep_minus_{$pid}" title="{$lang->xem_fast_rep_unlike_it}">-</span>';
+    $xfr_post_reps_count = '<span class="reps likes_{$pid}{$color}" title="{$lang->xem_fast_rep_who_like_it}">{$count}</span>';
+    $xfr_post_who_like_it = '<span class="liked_this">{$liked_this}</span>';
+
+    $insert_templates = [
+        [
+            'title' => 'xem_fast_rep',
+            'template' => $db->escape_string($xfr_post_reps),
+            'sid' => '-1',
+            'version' => '1',
+            'dateline' => NOW
+        ],
+        [
+            'title' => 'xem_fast_rep_post_positive',
+            'template' => $db->escape_string($xfr_post_positive),
+            'sid' => '-1',
+            'version' => '1',
+            'dateline' => NOW
+        ],
+        [
+            'title' => 'xem_fast_rep_post_negative',
+            'template' => $db->escape_string($xfr_post_negative),
+            'sid' => '-1',
+            'version' => '1',
+            'dateline' => NOW
+        ],
+        [
+            'title' => 'xem_fast_rep_post_reps_count',
+            'template' => $db->escape_string($xfr_post_reps_count),
+            'sid' => '-1',
+            'version' => '1',
+            'dateline' => NOW
+        ],
+        [
+            'title' => 'xem_fast_rep_post_who_like_it',
+            'template' => $db->escape_string($xfr_post_who_like_it),
+            'sid' => '-1',
+            'version' => '1',
+            'dateline' => NOW
+        ]
+    ];
+
+    $db->insert_query_multiple('templates', $insert_templates);
 
     rebuild_settings();
     
@@ -110,6 +170,12 @@ function xem_fast_rep_uninstall()
 {$stylesheets}') . '#i',
         '{$stylesheets}'
     );
+
+    $db->delete_query("templates", "title = 'xem_fast_rep'");
+    $db->delete_query("templates", "title = 'xem_fast_rep_post_positive'");
+    $db->delete_query("templates", "title = 'xem_fast_rep_post_negative'");
+    $db->delete_query("templates", "title = 'xem_fast_rep_post_reps_count'");
+    $db->delete_query("templates", "title = 'xem_fast_rep_post_who_like_it'");
 
     rebuild_settings();
 }
@@ -172,6 +238,7 @@ function xem_fast_rep_deactivate()
 {$stylesheets}') . '#i',
         '{$stylesheets}'
     );
+
 }
 
 class xem_fast_rep
@@ -183,7 +250,7 @@ class xem_fast_rep
 
     public function in_post(&$post)
     {
-        global $db, $mybb, $pids;
+        global $db, $mybb, $templates, $pids, $thread;
 
         if(!self::$first_check) 
         {
@@ -239,13 +306,29 @@ class xem_fast_rep
             }
         }
 
+        if($mybb->settings['xem_fast_rep_allow_unlike_posts'] == 0) 
+        {
+            if(is_array($liked_this[ $post['pid'] ]))
+            {
+                if(self::checkLiked($liked_this[$post['pid']], 1)) 
+                {
+                    $delete_reps = null;
+                }
+                if(self::checkLiked($liked_this[$post['pid']], -1)) 
+                {
+                    $add_reps = null;
+                }
+            }
+        }
+
         $liked = self::liked_this($liked_this[ $post['pid'] ]);
 
-        $post_reps = '<span id=\"xem_fast_rep\" class=\"reps_'.$post['pid'].'\" style=\"float:right;\">'.$liked.$add_reps.$delete_reps.self::count_reps($post['pid'], $r).'</span>';
+        $post_reps = $liked.$add_reps.$delete_reps.self::count_reps($post['pid'], $r);
+        $xfr_post_reps = $templates->get("xem_fast_rep");
 
-        if(self::adduser_permissions() && self::getuser_permissions($post))
+        if(self::adduser_permissions() && self::getuser_permissions($post, $thread))
         {
-            eval("\$post['xem_fast_rep'] = \"".$post_reps."\";");
+            eval('$post[\'xem_fast_rep\'] = "' . $xfr_post_reps . '";');
             return $post;
         }
     }
@@ -292,7 +375,7 @@ class xem_fast_rep
                     {
                         die(
                             stripslashes(self::liked_this($pid)) .
-                            stripslashes(self::add_button($uid, $pid, '0', '-1')) .
+                            ($mybb->settings['xem_fast_rep_allow_unlike_posts'] == 1 ? stripslashes(self::add_button($uid, $pid, '0', '-1')) : null) .
                             stripslashes(self::count_reps($pid, self::get_count_reps($pid)))
                         );
                     }
@@ -300,7 +383,7 @@ class xem_fast_rep
                     {
                         die(
                             stripslashes(self::liked_this($pid)) .
-                            stripslashes(self::add_button($uid, $pid, '0', '1')) .
+                            ($mybb->settings['xem_fast_rep_allow_unlike_posts'] == 1 ? stripslashes(self::add_button($uid, $pid, '0', '1')) : null) .
                             stripslashes(self::count_reps($pid, self::get_count_reps($pid)))
                         );
                     }
@@ -406,28 +489,44 @@ class xem_fast_rep
 
     private static function add_button($uid, $pid, $to_rep, $rep_value = 1)
     {
-        global $mybb, $lang;
+        global $mybb, $lang, $templates;
 
         $lang -> load('xem_fast_rep');
 
         if(($mybb->settings['posrep'] && $to_rep == 1) || ($to_rep == 0 && $rep_value == 1))
         {
-            return '<span onclick=\"vote(\''.$uid.'\', \''.$pid.'\', \''.$to_rep.'\')\" class=\"reps plus\" id=\"rep_plus_'.$pid.'\" title=\"'.$lang->xem_fast_rep_like_it.'\">+</span>';
+            eval('$xfr_pos = "' . $templates->get("xem_fast_rep_post_positive") . '";');
+            return $xfr_pos;
         }
 
         if(($mybb->settings['negrep'] && $to_rep == -1) || $to_rep == 0)
         {
-            return '<span onclick=\"vote(\''.$uid.'\', \''.$pid.'\', \''.$to_rep.'\')\" class=\"reps minus\" id=\"rep_minus_'.$pid.'\" title=\"'.$lang->xem_fast_rep_unlike_it.'\">-</span>';
+            eval('$xfr_neg = "' . $templates->get("xem_fast_rep_post_negative") . '";');
+            return $xfr_neg;
         }
     }
 
     private static function count_reps($pid, $count)
     {
-        global $lang;
+        global $templates, $lang;
 
         $lang -> load('xem_fast_rep');
 
-        return '<span class=\"reps likes_'.$pid.'\" title=\"'.$lang->xem_fast_rep_who_like_it.'\">'.$count.'</span>';
+        if($count > 0)
+        {
+            $color = ' positives';
+        }
+        elseif($count < 0)
+        {
+            $color = ' negatives';
+        }
+        else
+        {
+            $color = null;
+        }
+
+        eval('$count_reps = "' . $templates->get("xem_fast_rep_post_reps_count") . '";');
+        return $count_reps;
     }
 
     private static function get_count_reps($pid)
@@ -442,7 +541,7 @@ class xem_fast_rep
 
     private static function liked_this($liked_this)
     {
-        global $mybb, $db, $lang;
+        global $mybb, $templates, $db, $lang;
 
         $lang -> load('xem_fast_rep');
 
@@ -477,10 +576,12 @@ class xem_fast_rep
                 while($liked = $db->fetch_array($get_likes))
                 {
                     if($mybb->user['uid'] == $liked['uid']) $num = 0;
+
                     $likeThis[$num] = [
                         $liked['uid'],
                         $liked['username'],
                     ];
+
                     $num++;
                 }
             }
@@ -522,14 +623,17 @@ class xem_fast_rep
                         $m = self::profile_url($likeThis[0][0], $likeThis[0][1]).', '.self::profile_url($likeThis[1][0], $likeThis[1][1]).', '.self::profile_url($likeThis[2][0], $likeThis[2][1]).' '.$lang->and.' '.($count_likeThis-3).' '.$lang->others_person_like_it;
                         break;
                 }
-                return '<span class=\"liked_this\">'.$m.'</span>';
+
+                $liked_this = $m;
+                eval('$liked_this_tpl = "' . $templates->get("xem_fast_rep_post_who_like_it") . '";');
+                return $liked_this_tpl;
             }
         }
     }
 
     private static function profile_url($uid, $username)
     {
-        return '<a href=\"'.$mybb->settings['bburl'].get_profile_link($uid).'\">'.$username.'</a>';
+        return '<a href="'.$mybb->settings['bburl'].get_profile_link($uid).'">'.$username.'</a>';
     }
 
     private static function adduser_permissions()
@@ -544,57 +648,68 @@ class xem_fast_rep
         return true;
     }
 
-    private static function getuser_permissions($post)
+    private static function getuser_permissions($post, $thr=false)
     {
         global $mybb, $db;
 
         if(!is_array($post))
         {
-            $get_post = $db->simple_select('posts', '*', 'pid='.$post);
+            $get_post = $db->simple_select('posts', '*', 'pid='.(int)$post);
             $post = $db->fetch_array($get_post);
         }
 
-        $user = get_user($post['uid']);
-        $user_permissions = user_permissions($uid);
+        $user_permissions = user_permissions($post['uid']);
 
         if($post)
         {
-            $thread = get_thread($post['tid']);
-            $forum = get_forum($thread['fid']);
-            $forumpermissions = forum_permissions($forum['fid']);
+            $thread = is_array($thr) ? $thr : get_thread($post['tid']); 
+            $forumpermissions = forum_permissions($post['fid']);
 
-            if(($post['visible'] == 0 && !is_moderator($forum['fid'], "canviewunapprove")) || $post['visible'] < 0)
+            if(($post['visible'] == 0 && !is_moderator($post['fid'], "canviewunapprove")) || $post['visible'] < 0)
             {
-                $permissions = false;
+                return false;
             }
-            elseif(($thread['visible'] == 0 && !is_moderator($forum['fid'], "canviewunapprove")) || $thread['visible'] < 0)
+            elseif(($thread['visible'] == 0 && !is_moderator($post['fid'], "canviewunapprove")) || $thread['visible'] < 0)
             {
-                $permissions = false;
+                return false;
             }
             elseif($forumpermissions['canview'] == 0 || $forumpermissions['canpostreplys'] == 0 || $mybb->user['suspendposting'] == 1)
             {
-                $permissions = false;
+                return false;
             }
             elseif(isset($forumpermissions['canonlyviewownthreads']) && $forumpermissions['canonlyviewownthreads'] == 1 && $thread['uid'] != $mybb->user['uid'])
             {
-                $permissions = false;
-            }
-            else
-            {
-                $permissions = true;
+               return false;
             }
         }
         else
         {
-            $permissions = false;
+            return false;
         }
 
-        if($user_permissions['usereputationsystem'] != 1 || !$user || !$permissions)
+        if($user_permissions['usereputationsystem'] != 1 || $post['uid'] == 0)
         {
             return false;
         }
 
         return true;
+    }
+
+    private static function checkLiked($liked, $repValue)
+    {
+        global $mybb;
+
+        if(!is_array($liked)) return false;
+
+        foreach($liked as $like)
+        {
+            if(isset($like['adduid']) && $like['adduid'] == $mybb->user['uid'] && $like['reputation'] == $repValue) 
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
 }

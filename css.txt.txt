@@ -31,3 +31,11 @@
 	border-radius: 2px;
 	font-size: 11px;
 }
+
+.positives {
+	background: #148c00;
+}
+
+.negatives {
+	background: #8c0000;
+}
