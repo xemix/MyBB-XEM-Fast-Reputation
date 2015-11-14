@@ -36,7 +36,7 @@ function xem_fast_rep_info()
         'website'       => 'http://xemix.eu',
         'author'        => 'Xemix',
         'authorsite'    => 'http://xemix.eu',
-        'version'       => '1.5',
+        'version'       => '1.6',
         'codename'      => 'xem_fast_rep',
         'compatibility' => '18*'
     ];
@@ -306,7 +306,7 @@ class xem_fast_rep
             }
         }
 
-        if($mybb->settings['xem_fast_rep_allow_unlike_posts'] == 0) 
+        if($mybb->settings['xem_fast_rep_allow_unlike_posts'] == 0 || self::change_vote_permissions() == 0) 
         {
             if(is_array($liked_this[ $post['pid'] ]))
             {
@@ -341,12 +341,10 @@ class xem_fast_rep
             !$mybb->input['uid'] || 
             !$mybb->input['pid'] ||
             !$mybb->user['uid'] ||
-            (int)$mybb->input['reputation'] != '1' &&
-            (int)$mybb->input['reputation'] != '0' &&
-            (int)$mybb->input['reputation'] != '-1'
-        ) && !self::getuser_permissions($mybb->input['pid']) &&
+            !in_array((int)$mybb->input['reputation'], [-1, 0, 1]) ||
+            !self::getuser_permissions($mybb->input['pid']) ||
             !self::adduser_permissions()
-        ) exit;
+        )) exit; 
 
         $reputation = (int)$mybb->input['reputation'];
         $uid = (int)$mybb->input['uid'];
@@ -693,6 +691,18 @@ class xem_fast_rep
         }
 
         return true;
+    }
+
+    private function change_vote_permissions() 
+    {
+        global $mybb;
+
+        if($mybb->usergroup['candeletereputations'] == 1)
+        {
+            return true;
+        }
+
+        return false;
     }
 
     private static function checkLiked($liked, $repValue)
